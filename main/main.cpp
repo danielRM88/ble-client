@@ -41,7 +41,7 @@ class CurlTestTask: public Task {
 
 		RESTTimings *timings = client.getTimings();
 
-		client.setURL("http://172.16.0.76:3000");
+		client.setURL("http://serverURL");
 		client.addHeader("Content-Type", "application/json");
 		client.post("hello world!");
 		ESP_LOGD(tag, "Result: %s", client.getResponse().c_str());
@@ -76,5 +76,5 @@ void app_main(void) {
 	wifi = new WiFi();
 	wifi->setWifiEventHandler(eventHandler);
 
-	wifi->connectAP("Hall_Of_Residence", "hofr6971");
+	wifi->connectAP("WiFi SSID", "WiFi PASSWORD");
 }
