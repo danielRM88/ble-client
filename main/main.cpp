@@ -39,14 +39,17 @@ class CurlTestTask: public Task {
 		 * Test POST
 		 */
 
-		RESTTimings *timings = client.getTimings();
+		while(true) {
+			RESTTimings *timings = client.getTimings();
 
-		client.setURL("http://serverURL");
-		client.addHeader("Content-Type", "application/json");
-		client.post("hello world!");
-		ESP_LOGD(tag, "Result: %s", client.getResponse().c_str());
-		timings->refresh();
-		ESP_LOGD(tag, "timings: %s", timings->toString().c_str());
+			client.setURL("http://172.20.10.3:3000");
+			client.addHeader("Content-Type", "application/json");
+			client.post("hello world!");
+			ESP_LOGD(tag, "Result: %s", client.getResponse().c_str());
+			timings->refresh();
+			ESP_LOGD(tag, "timings: %s", timings->toString().c_str());
+			FreeRTOS::sleep(1000);
+		}
 
 		printf("Tests done\n");
 		return;
@@ -66,6 +69,13 @@ class MyWiFiEventHandler: public WiFiEventHandler {
 
 		return ESP_OK;
 	}
+
+	esp_err_t staDisconnected(system_event_sta_disconnected_t info) {
+		ESP_LOGD(tag, "DISCONNECTED");
+		esp_restart();
+
+		return ESP_OK;
+	}
 };
 
 
@@ -76,5 +86,5 @@ void app_main(void) {
 	wifi = new WiFi();
 	wifi->setWifiEventHandler(eventHandler);
 
-	wifi->connectAP("WiFi SSID", "WiFi PASSWORD");
+	wifi->connectAP("WIFI SSID", "WIFI PASSWORD");
 }
