@@ -153,6 +153,7 @@ public:
     void                      setIPInfo(const char* ip, const char* gw, const char* netmask);
     void                      setIPInfo(uint32_t ip, uint32_t gw, uint32_t netmask);
     void                      setWifiEventHandler(WiFiEventHandler *wifiEventHandler);
+    void						 releaseSemaphore();
 };
 
 #endif /* MAIN_WIFI_H_ */

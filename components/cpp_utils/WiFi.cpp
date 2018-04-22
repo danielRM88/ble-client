@@ -209,7 +209,9 @@ bool WiFi::connectAP(const std::string& ssid, const std::string& password, bool 
 	return m_apConnected;  // Return true if we are now connected and false if not.
 } // connectAP
 
-
+void WiFi::releaseSemaphore() {
+	m_connectFinished.give();
+}
 
 /**
  * @brief Dump diagnostics to the log.
