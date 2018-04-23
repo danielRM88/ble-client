@@ -33,7 +33,7 @@
 									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/nvs_flash/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/driver/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${IDF_PATH}/components/log/include&quot;"/>
-									<listOptionValue builtIn="false" value="/Users/danielrosato/eclipse-workspace/receiver/build/include"/>
+									<listOptionValue builtIn="false" value="/Users/danielrosato/eclipse-workspace/ble-client/build/include"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1029384319" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
