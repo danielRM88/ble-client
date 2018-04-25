@@ -12,79 +12,139 @@
  */
 #include <curl/curl.h>
 #include <esp_log.h>
-#include <RESTClient.h>
 #include <string>
-#include <Task.h>
-#include <WiFi.h>
-#include <WiFiEventHandler.h>
+#include <sstream>
+#include "BLEDevice.h"
+
+#include "BLEAdvertisedDevice.h"
+#include "BLEClient.h"
+#include "BLEScan.h"
+#include "BLEUtils.h"
+#include "Task.h"
+
 
 #include "sdkconfig.h"
 
-static char tag[] = "test_rest";
+static char LOG_TAG[] = "main";
 
 extern "C" {
 	void app_main(void);
 }
 
+static BLEUUID serviceUUID("91bad492-b950-4226-aa2b-4ede9fa42f59");
+// The characteristic of the remote service we are interested in.
+static BLEUUID    charUUID("0d563a58-196a-48ce-ace2-dfec78acc814");
+//static BLEUUID    charUUID("12345678-9ABC-DEF1-2345-6789ABCDEF12");
 
-static WiFi *wifi;
+//BLEClient*  pClient;
 
+//static void notifyCallback(
+//	BLERemoteCharacteristic* pBLERemoteCharacteristic,
+//	uint8_t* pData,
+//	size_t length,
+//	bool isNotify) {
+////		std::string value = pBLERemoteCharacteristic->readValue();
+//		ESP_LOGI(LOG_TAG, "Notify callback for characteristic %s of data length %d",
+//				pBLERemoteCharacteristic->getUUID().toString().c_str(), length);
+//
+////		ESP_LOGI(LOG_TAG, "The characteristic value was: %d", value.c_str());
+//
+//		int rssi;
+////		if(value.compare("send") == 0) {
+//			std::ostringstream stringStream;
+//			rssi = pClient->getRssi();
+//			stringStream << rssi;
+//			pBLERemoteCharacteristic->writeValue(stringStream.str());
+////		}
+//}
 
-class CurlTestTask: public Task {
-	void run(void *data) {
-		ESP_LOGD(tag, "Testing curl ...");
-		RESTClient client;
+/**
+ * Become a BLE client to a remote BLE server.  We are passed in the address of the BLE server
+ * as the input parameter when the task is created.
+ */
+class MyClient: public Task {
+	void run(void* data) {
+		BLEAddress* pAddress = (BLEAddress*)data;
+		BLEClient* pClient  = BLEDevice::createClient();
 
-		/**
-		 * Test POST
-		 */
+		// Connect to the remove BLE Server.
+		pClient->connect(*pAddress);
 
-		while(true) {
-			RESTTimings *timings = client.getTimings();
-
-			client.setURL("http://172.20.10.3:3000");
-			client.addHeader("Content-Type", "application/json");
-			client.post("hello world!");
-			ESP_LOGD(tag, "Result: %s", client.getResponse().c_str());
-			timings->refresh();
-			ESP_LOGD(tag, "timings: %s", timings->toString().c_str());
-			FreeRTOS::sleep(1000);
+		// Obtain a reference to the service we are after in the remote BLE server.
+		BLERemoteService* pRemoteService = pClient->getService(serviceUUID);
+		if (pRemoteService == nullptr) {
+			ESP_LOGD(LOG_TAG, "Failed to find our service UUID: %s", serviceUUID.toString().c_str());
+			return;
 		}
 
-		printf("Tests done\n");
-		return;
-	}
-};
 
-static CurlTestTask *curlTestTask;
+		// Obtain a reference to the characteristic in the service of the remote BLE server.
+		BLERemoteCharacteristic* pRemoteCharacteristic = pRemoteService->getCharacteristic(charUUID);
+		if (pRemoteCharacteristic == nullptr) {
+			ESP_LOGD(LOG_TAG, "Failed to find our characteristic UUID: %s", charUUID.toString().c_str());
+			return;
+		}
 
-class MyWiFiEventHandler: public WiFiEventHandler {
+		int rssi = 0;
+		while(1) {
+			// Set a new value of the characteristic
+			ESP_LOGD(LOG_TAG, "Setting the new value");
 
-	esp_err_t staGotIp(system_event_sta_got_ip_t event_sta_got_ip) {
-		ESP_LOGD(tag, "MyWiFiEventHandler(Class): staGotIp");
+			// Read the value of the characteristic.
+//			std::string value = pRemoteCharacteristic->readValue();
+//			ESP_LOGD(LOG_TAG, "The characteristic value was: %s", value.c_str());
 
-		curlTestTask = new CurlTestTask();
-		curlTestTask->setStackSize(12000);
-		curlTestTask->start();
+//			if(value.compare("send") == 0) {
+				std::ostringstream stringStream;
+				rssi = pClient->getRssi();
+				stringStream << rssi;
+				pRemoteCharacteristic->writeValue(stringStream.str());
 
-		return ESP_OK;
-	}
+				FreeRTOS::sleep(1000);
+//			} else {
+//				FreeRTOS::sleep(1000);
+//			}
+		}
 
-	esp_err_t staDisconnected(system_event_sta_disconnected_t info) {
-		ESP_LOGD(tag, "DISCONNECTED");
-		esp_restart();
+		pClient->disconnect();
 
-		return ESP_OK;
-	}
-};
+//		// Read the value of the characteristic.
+//		std::string value = pRemoteCharacteristic->readValue();
+//		ESP_LOGD(LOG_TAG, "The characteristic value was: %s", value.c_str());
 
+//		pRemoteCharacteristic->registerForNotify(notifyCallback);
+
+		ESP_LOGD(LOG_TAG, "%s", pClient->toString().c_str());
+		ESP_LOGD(LOG_TAG, "-- End of task");
+	} // run
+}; // MyClient
+
+/**
+ * Scan for BLE servers and find the first one that advertises the service we are looking for.
+ */
+class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
+	/**
+	 * Called for each advertising BLE server.
+	 */
+	void onResult(BLEAdvertisedDevice advertisedDevice) {
+		ESP_LOGI(LOG_TAG, "Advertised Device: %s", advertisedDevice.toString().c_str());
+
+		if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(serviceUUID)) {
+			advertisedDevice.getScan()->stop();
+
+			ESP_LOGI(LOG_TAG, "Found our device!  address: %s", advertisedDevice.getAddress().toString().c_str());
+			MyClient* pMyClient = new MyClient();
+			pMyClient->setStackSize(18000);
+			pMyClient->start(new BLEAddress(*advertisedDevice.getAddress().getNative()));
+		} // Found our server
+	} // onResult
+}; // MyAdvertisedDeviceCallbacks
 
 void app_main(void) {
-	ESP_LOGD(tag, "app_main: libcurl starting");
-	MyWiFiEventHandler *eventHandler = new MyWiFiEventHandler();
-
-	wifi = new WiFi();
-	wifi->setWifiEventHandler(eventHandler);
-
-	wifi->connectAP("WIFI SSID", "WIFI PASSWORD");
+	ESP_LOGD(LOG_TAG, "Scanning sample starting");
+	BLEDevice::init("");
+	BLEScan *pBLEScan = BLEDevice::getScan();
+	pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
+	pBLEScan->setActiveScan(true);
+	pBLEScan->start(15);
 }

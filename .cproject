@@ -3,7 +3,17 @@
 	<storageModule moduleId="org.eclipse.cdt.core.settings">
 		<cconfiguration id="cdt.managedbuild.toolchain.gnu.cross.base.627592866">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.cross.base.627592866" moduleId="org.eclipse.cdt.core.settings" name="Default">
-				<externalSettings/>
+				<externalSettings>
+					<externalSetting>
+						<entry flags="RESOLVED" kind="includePath" name="/Users/danielrosato/eclipse-workspace/receiver/build/include"/>
+						<entry flags="RESOLVED" kind="includePath" name="/Users/danielrosato/esp/esp-idf/components/log/include"/>
+						<entry flags="RESOLVED" kind="includePath" name="/Users/danielrosato/esp/esp-idf/components/driver/include"/>
+						<entry flags="RESOLVED" kind="includePath" name="/Users/danielrosato/esp/esp-idf/components/nvs_flash/include"/>
+						<entry flags="RESOLVED" kind="includePath" name="/Users/danielrosato/esp/esp-idf/components/freertos/include"/>
+						<entry flags="RESOLVED" kind="includePath" name="/Users/danielrosato/esp/esp-idf/components/newlib/include"/>
+						<entry flags="RESOLVED" kind="includePath" name="/Users/danielrosato/esp/esp-idf/components/esp32/include"/>
+					</externalSetting>
+				</externalSettings>
 				<extensions>
 					<extension id="org.eclipse.cdt.core.ELF" point="org.eclipse.cdt.core.BinaryParser"/>
 					<extension id="org.eclipse.cdt.core.GASErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
