@@ -26,6 +26,12 @@
 #include "sdkconfig.h"
 
 static char LOG_TAG[] = "main";
+static const int BUILT_IN_LED = 2;
+static const int ON = 1;
+static const int OFF = 1;
+
+#define uS_TO_S_CONVERSION 1000000
+#define TIME_TO_SLEEP 3
 
 extern "C" {
 	void app_main(void);
@@ -37,6 +43,8 @@ static BLEUUID    charUUID("0d563a58-196a-48ce-ace2-dfec78acc814");
 //static BLEUUID    charUUID("12345678-9ABC-DEF1-2345-6789ABCDEF12");
 
 //BLEClient*  pClient;
+
+RTC_DATA_ATTR BLEAddress* pAddress;
 
 //static void notifyCallback(
 //	BLERemoteCharacteristic* pBLERemoteCharacteristic,
@@ -64,8 +72,8 @@ static BLEUUID    charUUID("0d563a58-196a-48ce-ace2-dfec78acc814");
  */
 class MyClient: public Task {
 	void run(void* data) {
-		BLEAddress* pAddress = (BLEAddress*)data;
-		BLEClient* pClient  = BLEDevice::createClient();
+		pAddress = (BLEAddress*)data;
+		BLEClient *pClient  = BLEDevice::createClient();
 
 		// Connect to the remove BLE Server.
 		pClient->connect(*pAddress);
@@ -88,19 +96,30 @@ class MyClient: public Task {
 		int rssi = 0;
 		while(1) {
 			// Set a new value of the characteristic
-			ESP_LOGD(LOG_TAG, "Setting the new value");
 
 			// Read the value of the characteristic.
 //			std::string value = pRemoteCharacteristic->readValue();
 //			ESP_LOGD(LOG_TAG, "The characteristic value was: %s", value.c_str());
 
 //			if(value.compare("send") == 0) {
-				std::ostringstream stringStream;
-				rssi = pClient->getRssi();
-				stringStream << rssi;
-				pRemoteCharacteristic->writeValue(stringStream.str());
+//				std::ostringstream stringStream;
+//				rssi = pClient->getRssi();
+//				ESP_LOGD(LOG_TAG, "RSSI %d", rssi);
+//				stringStream << rssi;
+//				pRemoteCharacteristic->writeValue(stringStream.str());
+			if(!pClient->isConnected()){
+				ESP_LOGD(LOG_TAG, "LOST CONNECTION!");
+				GPIO_OUTPUT_SET( BUILT_IN_LED, ON );
+				pClient->disconnect();
+				pClient->connect(*pAddress);
+				GPIO_OUTPUT_SET( BUILT_IN_LED, OFF );
+				ESP_LOGD(LOG_TAG, "CONNECTED!");
+			}
 
-				FreeRTOS::sleep(1000);
+			FreeRTOS::sleep(5000);
+//			ESP_LOGD(LOG_TAG, "BEFORE SLEEP!");
+//			esp_light_sleep_start();
+//			ESP_LOGD(LOG_TAG, "AFTER SLEEP!");
 //			} else {
 //				FreeRTOS::sleep(1000);
 //			}
@@ -130,6 +149,9 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
 		ESP_LOGI(LOG_TAG, "Advertised Device: %s", advertisedDevice.toString().c_str());
 
 		if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(serviceUUID)) {
+			GPIO_OUTPUT_SET( BUILT_IN_LED, ON );
+			FreeRTOS::sleep(500);
+			GPIO_OUTPUT_SET( BUILT_IN_LED, OFF );
 			advertisedDevice.getScan()->stop();
 
 			ESP_LOGI(LOG_TAG, "Found our device!  address: %s", advertisedDevice.getAddress().toString().c_str());
@@ -141,10 +163,14 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
 }; // MyAdvertisedDeviceCallbacks
 
 void app_main(void) {
+
+	GPIO_OUTPUT_SET( BUILT_IN_LED, OFF );
 	ESP_LOGD(LOG_TAG, "Scanning sample starting");
 	BLEDevice::init("");
+//	BLEDevice::setPower(ESP_PWR_LVL_P1);
 	BLEScan *pBLEScan = BLEDevice::getScan();
 	pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
 	pBLEScan->setActiveScan(true);
 	pBLEScan->start(15);
+	esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_CONVERSION);
 }
