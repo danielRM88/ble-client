@@ -103,8 +103,8 @@ class MyClient: public Task {
 
 //			if(value.compare("send") == 0) {
 //				std::ostringstream stringStream;
-//				rssi = pClient->getRssi();
-//				ESP_LOGD(LOG_TAG, "RSSI %d", rssi);
+			rssi = pClient->getRssi();
+			ESP_LOGD(LOG_TAG, "RSSI %d", rssi);
 //				stringStream << rssi;
 //				pRemoteCharacteristic->writeValue(stringStream.str());
 			if(!pClient->isConnected()){
@@ -167,7 +167,7 @@ void app_main(void) {
 	GPIO_OUTPUT_SET( BUILT_IN_LED, OFF );
 	ESP_LOGD(LOG_TAG, "Scanning sample starting");
 	BLEDevice::init("");
-//	BLEDevice::setPower(ESP_PWR_LVL_P1);
+	BLEDevice::setPower(ESP_PWR_LVL_P7);
 	BLEScan *pBLEScan = BLEDevice::getScan();
 	pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
 	pBLEScan->setActiveScan(true);
