@@ -44,12 +44,13 @@
  */
 static const char* LOG_TAG = "BLEClient";
 
-BLEClient::BLEClient() {
+BLEClient::BLEClient(uint16_t appId) {
 	m_pClientCallbacks = nullptr;
 	m_conn_id          = 0;
 	m_gattc_if         = 0;
 	m_haveServices     = false;
 	m_isConnected      = false;  // Initially, we are flagged as not connected.
+	m_app_id           = appId;
 } // BLEClient
 
 
@@ -87,7 +88,7 @@ void BLEClient::clearServices() {
  * @return True on success.
  */
 bool BLEClient::connect(BLEAddress address) {
-	ESP_LOGD(LOG_TAG, ">> connect(%s)", address.toString().c_str());
+	ESP_LOGI(LOG_TAG, ">> connect(%s)", address.toString().c_str());
 
 // We need the connection handle that we get from registering the application.  We register the app
 // and then block on its completion.  When the event has arrived, we will have the handle.
@@ -95,7 +96,7 @@ bool BLEClient::connect(BLEAddress address) {
 
 	clearServices(); // Delete any services that may exist.
 
-	esp_err_t errRc = ::esp_ble_gattc_app_register(0);
+	esp_err_t errRc = ::esp_ble_gattc_app_register(m_app_id);
 	if (errRc != ESP_OK) {
 		ESP_LOGE(LOG_TAG, "esp_ble_gattc_app_register: rc=%d %s", errRc, GeneralUtils::errorToString(errRc));
 		return false;
@@ -113,13 +114,14 @@ bool BLEClient::connect(BLEAddress address) {
 		BLE_ADDR_TYPE_PUBLIC,          // Note: This was added on 2018-04-03 when the latest ESP-IDF was detected to have changed the signature.
 		1                              // direct connection
 	);
+	ESP_LOGI(LOG_TAG, "AFTER GATTC OPEN");
 	if (errRc != ESP_OK) {
 		ESP_LOGE(LOG_TAG, "esp_ble_gattc_open: rc=%d %s", errRc, GeneralUtils::errorToString(errRc));
 		return false;
 	}
 
 	uint32_t rc = m_semaphoreOpenEvt.wait("connect");   // Wait for the connection to complete.
-	ESP_LOGD(LOG_TAG, "<< connect(), rc=%d", rc==ESP_GATT_OK);
+	ESP_LOGI(LOG_TAG, "<< connect(), rc=%d", rc==ESP_GATT_OK);
 	return rc == ESP_GATT_OK;
 } // connect
 

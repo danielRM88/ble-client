@@ -151,6 +151,11 @@ void BLEServer::handleGAPEvent(
 			*/
 			break;
 		}
+		case ESP_GAP_BLE_READ_RSSI_COMPLETE_EVT: {
+			int rssi = (uint32_t)param->read_rssi_cmpl.rssi;
+			m_semaphoreRssiCmplEvt.give(rssi);
+			break;
+		}
 
 		default:
 			break;

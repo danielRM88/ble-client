@@ -28,7 +28,7 @@ class BLEClientCallbacks;
  */
 class BLEClient {
 public:
-	BLEClient();
+	BLEClient(uint16_t appId);
 	~BLEClient();
 
 	bool                                       connect(BLEAddress address);   // Connect to the remote BLE Server
@@ -68,6 +68,7 @@ private:
 	esp_gatt_if_t                              getGattcIf();
 	BLEAddress    m_peerAddress = BLEAddress((uint8_t*)"\0\0\0\0\0\0");   // The BD address of the remote server.
 	uint16_t      m_conn_id;
+	uint16_t      m_app_id;
 //	int           m_deviceType;
 	esp_gatt_if_t m_gattc_if;
 	bool          m_haveServices;    // Have we previously obtain the set of services from the remote server.

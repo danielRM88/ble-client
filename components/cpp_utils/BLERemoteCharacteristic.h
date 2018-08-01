@@ -22,6 +22,11 @@
 class BLERemoteService;
 class BLERemoteDescriptor;
 
+class BLENotifier {
+	public:
+		virtual void onNotify(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify, esp_bd_addr_t remote_bda)=0;
+};
+
 /**
  * @brief A model of a remote %BLE characteristic.
  */
@@ -44,7 +49,7 @@ public:
 	uint8_t     readUInt8(void);
 	uint16_t    readUInt16(void);
 	uint32_t    readUInt32(void);
-	void        registerForNotify(void (*notifyCallback)(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify));
+	void        registerForNotify(BLENotifier* objectToNotify);
 	void        writeValue(uint8_t* data, size_t length, bool response = false);
 	void        writeValue(std::string newValue, bool response = false);
 	void        writeValue(uint8_t newValue, bool response = false);
@@ -52,6 +57,7 @@ public:
 
 private:
 	BLERemoteCharacteristic(uint16_t handle, BLEUUID uuid, esp_gatt_char_prop_t charProp, BLERemoteService* pRemoteService);
+	BLENotifier* toNotify = nullptr;
 	friend class BLEClient;
 	friend class BLERemoteService;
 	friend class BLERemoteDescriptor;

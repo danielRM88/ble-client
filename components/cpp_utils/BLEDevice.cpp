@@ -39,7 +39,10 @@ static const char* LOG_TAG = "BLEDevice";
  */
 BLEServer* BLEDevice::m_pServer = nullptr;
 BLEScan*   BLEDevice::m_pScan   = nullptr;
-BLEClient* BLEDevice::m_pClient = nullptr;
+//BLEClient* BLEDevice::m_pClient = nullptr;
+std::map<uint16_t, BLEClient*> BLEDevice::m_clients;
+std::map<esp_gatt_if_t, BLEClient*> BLEDevice::m_connectedClients;
+std::map<std::string, BLEClient*> BLEDevice::m_connectedClientsAddr;
 bool       initialized          = false;   // Have we been initialized?
 esp_ble_sec_act_t 	BLEDevice::m_securityLevel = (esp_ble_sec_act_t)0;
 BLESecurityCallbacks* BLEDevice::m_securityCallbacks = nullptr;
@@ -49,15 +52,15 @@ uint16_t   BLEDevice::m_localMTU = 23;
  * @brief Create a new instance of a client.
  * @return A new instance of the client.
  */
-/* STATIC */ BLEClient* BLEDevice::createClient() {
+/* STATIC */ BLEClient* BLEDevice::createClient(uint16_t appId) {
 	ESP_LOGD(LOG_TAG, ">> createClient");
 #ifndef CONFIG_GATTC_ENABLE  // Check that BLE GATTC is enabled in make menuconfig
 	ESP_LOGE(LOG_TAG, "BLE GATTC is not enabled - CONFIG_GATTC_ENABLE not defined");
 	abort();
 #endif  // CONFIG_GATTC_ENABLE
-	m_pClient = new BLEClient();
+	m_clients[appId] = new BLEClient(appId);
 	ESP_LOGD(LOG_TAG, "<< createClient");
-	return m_pClient;
+	return m_clients[appId];
 } // createClient
 
 
@@ -65,14 +68,14 @@ uint16_t   BLEDevice::m_localMTU = 23;
  * @brief Create a new instance of a server.
  * @return A new instance of the server.
  */
-/* STATIC */ BLEServer* BLEDevice::createServer() {
+/* STATIC */ BLEServer* BLEDevice::createServer(uint16_t appId) {
 	ESP_LOGD(LOG_TAG, ">> createServer");
 #ifndef CONFIG_GATTS_ENABLE  // Check that BLE GATTS is enabled in make menuconfig
 	ESP_LOGE(LOG_TAG, "BLE GATTS is not enabled - CONFIG_GATTS_ENABLE not defined");
 	abort();
 #endif // CONFIG_GATTS_ENABLE
 	m_pServer = new BLEServer();
-	m_pServer->createApp(0);
+	m_pServer->createApp(appId);
 	ESP_LOGD(LOG_TAG, "<< createServer");
 	return m_pServer;
 } // createServer
@@ -143,7 +146,18 @@ uint16_t   BLEDevice::m_localMTU = 23;
 	BLEUtils::dumpGattClientEvent(event, gattc_if, param);
 
 	switch(event) {
+		case ESP_GATTC_REG_EVT: {
+				ESP_LOGI(LOG_TAG, "REG_EVT");
+				// get associated client
+				BLEClient* client = m_clients[(uint16_t)param->reg.app_id];
+	 			// store connected client with interface
+				m_connectedClients[gattc_if] = client;
+				break;
+			}
 		case ESP_GATTC_CONNECT_EVT: {
+				BLEClient* temp = m_connectedClients[gattc_if];
+				BLEAddress address = BLEAddress(param->connect.remote_bda);
+				m_connectedClientsAddr[address.toString()] = temp;
 			if(BLEDevice::getMTU() != 23){
 				esp_err_t errRc = esp_ble_gattc_send_mtu_req(gattc_if, param->connect.conn_id);
 				if (errRc != ESP_OK) {
@@ -165,9 +179,8 @@ uint16_t   BLEDevice::m_localMTU = 23;
 
 
 	// If we have a client registered, call it.
-	if (BLEDevice::m_pClient != nullptr) {
-		BLEDevice::m_pClient->gattClientEventHandler(event, gattc_if, param);
-	}
+	BLEClient* client = m_connectedClients[gattc_if];
+	client->gattClientEventHandler(event, gattc_if, param);
 
 } // gattClientEventHandler
 
@@ -262,8 +275,11 @@ uint16_t   BLEDevice::m_localMTU = 23;
 		BLEDevice::m_pServer->handleGAPEvent(event, param);
 	}
 
-	if (BLEDevice::m_pClient != nullptr) {
-		BLEDevice::m_pClient->handleGAPEvent(event, param);
+	// hardcoded for now because of the remote address dependency
+	if (event == ESP_GAP_BLE_READ_RSSI_COMPLETE_EVT) {
+		BLEAddress address = BLEAddress(param->read_rssi_cmpl.remote_addr);
+		BLEClient* client = m_connectedClientsAddr[address.toString()];
+		client->handleGAPEvent(event, param);
 	}
 
 	if (BLEDevice::m_pScan != nullptr) {
@@ -314,7 +330,7 @@ uint16_t   BLEDevice::m_localMTU = 23;
  */
 /* STATIC */ std::string BLEDevice::getValue(BLEAddress bdAddress, BLEUUID serviceUUID, BLEUUID characteristicUUID) {
 	ESP_LOGD(LOG_TAG, ">> getValue: bdAddress: %s, serviceUUID: %s, characteristicUUID: %s", bdAddress.toString().c_str(), serviceUUID.toString().c_str(), characteristicUUID.toString().c_str());
-	BLEClient *pClient = createClient();
+	BLEClient *pClient = createClient(DEFAULT_CLIENT_APP_ID);
 	pClient->connect(bdAddress);
 	std::string ret = pClient->getValue(serviceUUID, characteristicUUID);
 	pClient->disconnect();
@@ -444,7 +460,7 @@ uint16_t   BLEDevice::m_localMTU = 23;
  */
 /* STATIC */ void BLEDevice::setValue(BLEAddress bdAddress, BLEUUID serviceUUID, BLEUUID characteristicUUID, std::string value) {
 	ESP_LOGD(LOG_TAG, ">> setValue: bdAddress: %s, serviceUUID: %s, characteristicUUID: %s", bdAddress.toString().c_str(), serviceUUID.toString().c_str(), characteristicUUID.toString().c_str());
-	BLEClient *pClient = createClient();
+	BLEClient *pClient = createClient(DEFAULT_CLIENT_APP_ID);
 	pClient->connect(bdAddress);
 	pClient->setValue(serviceUUID, characteristicUUID, value);
 	pClient->disconnect();
