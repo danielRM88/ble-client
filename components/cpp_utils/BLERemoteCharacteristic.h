@@ -22,11 +22,6 @@
 class BLERemoteService;
 class BLERemoteDescriptor;
 
-class BLENotifier {
-	public:
-		virtual void onNotify(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify, esp_bd_addr_t remote_bda)=0;
-};
-
 /**
  * @brief A model of a remote %BLE characteristic.
  */
@@ -49,15 +44,15 @@ public:
 	uint8_t     readUInt8(void);
 	uint16_t    readUInt16(void);
 	uint32_t    readUInt32(void);
-	void        registerForNotify(BLENotifier* objectToNotify);
+	void        registerForNotify(void (*notifyCallback)(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify), bool notifications = true);
 	void        writeValue(uint8_t* data, size_t length, bool response = false);
 	void        writeValue(std::string newValue, bool response = false);
 	void        writeValue(uint8_t newValue, bool response = false);
 	std::string toString(void);
+	uint8_t*	readRawData();
 
 private:
 	BLERemoteCharacteristic(uint16_t handle, BLEUUID uuid, esp_gatt_char_prop_t charProp, BLERemoteService* pRemoteService);
-	BLENotifier* toNotify = nullptr;
 	friend class BLEClient;
 	friend class BLERemoteService;
 	friend class BLERemoteDescriptor;
@@ -82,6 +77,7 @@ private:
 	FreeRTOS::Semaphore  m_semaphoreRegForNotifyEvt  = FreeRTOS::Semaphore("RegForNotifyEvt");
 	FreeRTOS::Semaphore  m_semaphoreWriteCharEvt     = FreeRTOS::Semaphore("WriteCharEvt");
 	std::string          m_value;
+	uint8_t 			 *m_rawData;
   void (*m_notifyCallback)(BLERemoteCharacteristic* pBLERemoteCharacteristic, uint8_t* pData, size_t length, bool isNotify);
 
 	// We maintain a map of descriptors owned by this characteristic keyed by a string representation of the UUID.
