@@ -34,6 +34,8 @@ void http_send_request(const char* req)
 	int s;
 	ESP_LOGI(TAG, "Connected to AP");
 
+	ESP_LOGI(TAG, "WEB SERVER: %s", WEB_SERVER);
+	ESP_LOGI(TAG, "WEB_PORT: %s", WEB_PORT);
 	int err = getaddrinfo(WEB_SERVER, WEB_PORT, &hints, &res);
 
 	if(err != 0 || res == NULL) {

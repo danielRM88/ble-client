@@ -17,7 +17,8 @@
 #include "esp32-hal-log.h"
 #endif
 
-BLEAddress::BLEAddress() {}
+
+BLEAddress::BLEAddress() {} // BLEAddress
 
 /**
  * @brief Create an address from the native ESP32 representation.

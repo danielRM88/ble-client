@@ -39,7 +39,7 @@ class MyClient: public Task {
 		int rssiValue = 0;
 		RESTClient client;
 		bool info;
-		BLEClient* pClient = BLEDevice::createClient();
+		BLEClient* pClient;
 
 		while (true) {
 			info = false;
@@ -47,15 +47,21 @@ class MyClient: public Task {
 			jsonBody.clear();
 			size.str(std::string());
 			size.clear();
-			jsonBody << "{\"values\": [";
+			jsonBody << "{\"measurements\": [";
 			for(int i=0; i<NUMBER_OF_BEACONS; i++) {
+				pClient = BLEDevice::createClient();
 				address = addresses[i];
-				ESP_LOGI(LOG_TAG, "ADDRESS %d: %s", i, address.toString().c_str());
-				pClient->connect(address);
+				while(!pClient->isConnected()) {
+					ESP_LOGI(LOG_TAG, "CONNECTING TO ADDRESS %d: %s", i, address.toString().c_str());
+					pClient->connect(address);
+					if(!pClient->isConnected()) {
+						pClient->disconnect();
+					}
+				}
 				if(pClient->isConnected()) {
 					info = true;
 					rssiValue = pClient->getRssi();
-					jsonBody << "{\"rssi\": " << rssiValue << ", \"mac_address\": \"" << address.toString() << "\"}";
+					jsonBody << "{\"value\": " << rssiValue << ", \"mac_address\": \"" << address.toString() << "\"}";
 					if (i+1 != NUMBER_OF_BEACONS) {
 						jsonBody << ", ";
 					}
@@ -63,6 +69,7 @@ class MyClient: public Task {
 				do {
 					pClient->disconnect();
 				} while(pClient->isConnected());
+				delete pClient;
 			}
 
 			jsonBodySize = jsonBody.str().size();
@@ -97,7 +104,7 @@ class MyClient: public Task {
 			} else {
 				ESP_LOGI(LOG_TAG, "COULD NOT CONNECT TO ANY BEACONS");
 			}
-			FreeRTOS::sleep(200);
+			FreeRTOS::sleep(100);
 		}
 	}
 };
@@ -132,6 +139,7 @@ class MyWiFiEventHandler: public WiFiEventHandler {
 
 	esp_err_t staDisconnected(system_event_sta_disconnected_t info) {
 		ESP_LOGI(LOG_TAG, "DISCONNECTED");
+		wifi->dump();
 		esp_restart();
 
 		return ESP_OK;
@@ -145,7 +153,8 @@ void run() {
 
 	BLEDevice::init("");
 	BLEDevice::setPower(ESP_PWR_LVL_P7);
-	ESP_LOGI(LOG_TAG, "BEGGINING OF LOOP");
+	ESP_LOGI(LOG_TAG, "WIFI_NETWORK: %s", WIFI_SSID);
+	ESP_LOGI(LOG_TAG, "WIFI_PASSWORD: %s", WIFI_PASSWORD);
 	wifi->connectAP(WIFI_SSID, WIFI_PASSWORD);
 
 	BLEScan *pBLEScan = BLEDevice::getScan();
