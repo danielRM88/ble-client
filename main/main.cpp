@@ -23,7 +23,7 @@ extern "C" {
 
 static char LOG_TAG[] = "BLEClient";
 static WiFi *wifi;
-static const int NUMBER_OF_BEACONS = 2;
+static const int NUMBER_OF_BEACONS = 3;
 uint32_t connectedCount;
 BLEAddress addresses[NUMBER_OF_BEACONS];
 
@@ -104,7 +104,7 @@ class MyClient: public Task {
 			} else {
 				ESP_LOGI(LOG_TAG, "COULD NOT CONNECT TO ANY BEACONS");
 			}
-			FreeRTOS::sleep(100);
+//			FreeRTOS::sleep(100);
 		}
 	}
 };
