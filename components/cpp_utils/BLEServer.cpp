@@ -18,7 +18,6 @@
 #include "BLEUtils.h"
 #include <string.h>
 #include <string>
-#include <gatt_api.h>
 #include <unordered_set>
 #ifdef ARDUINO_ARCH_ESP32
 #include "esp32-hal-log.h"
@@ -70,21 +69,23 @@ BLEService* BLEServer::createService(const char* uuid) {
  * of a new service.  Every service must have a unique UUID.
  * @param [in] uuid The UUID of the new service.
  * @param [in] numHandles The maximum number of handles associated with this service.
+ * @param [in] inst_id With multiple services with the same UUID we need to provide inst_id value different for each service.
  * @return A reference to the new service object.
  */
-BLEService* BLEServer::createService(BLEUUID uuid, uint32_t numHandles) {
+BLEService* BLEServer::createService(BLEUUID uuid, uint32_t numHandles, uint8_t inst_id) {
 	ESP_LOGD(LOG_TAG, ">> createService - %s", uuid.toString().c_str());
 	m_semaphoreCreateEvt.take("createService");
 
 	// Check that a service with the supplied UUID does not already exist.
 	if (m_serviceMap.getByUUID(uuid) != nullptr) {
-		ESP_LOGE(LOG_TAG, "<< Attempt to create a new service with uuid %s but a service with that UUID already exists.",
+		ESP_LOGW(LOG_TAG, "<< Attempt to create a new service with uuid %s but a service with that UUID already exists.",
 			uuid.toString().c_str());
-		m_semaphoreCreateEvt.give();
-		return nullptr;
+		//m_semaphoreCreateEvt.give();
+		//return nullptr;
 	}
 
 	BLEService* pService = new BLEService(uuid, numHandles);
+	pService->m_id = inst_id;
 	m_serviceMap.setByUUID(uuid, pService); // Save a reference to this service being on this server.
 	pService->executeCreate(this);          // Perform the API calls to actually create the service.
 
@@ -94,6 +95,24 @@ BLEService* BLEServer::createService(BLEUUID uuid, uint32_t numHandles) {
 	return pService;
 } // createService
 
+
+/**
+ * @brief Get a %BLE Service by its UUID
+ * @param [in] uuid The UUID of the new service.
+ * @return A reference to the service object.
+ */
+BLEService* 	BLEServer::getServiceByUUID(const char* uuid) {
+	return m_serviceMap.getByUUID(uuid);
+}
+
+/**
+ * @brief Get a %BLE Service by its UUID
+ * @param [in] uuid The UUID of the new service.
+ * @return A reference to the service object.
+ */
+BLEService* 	BLEServer::getServiceByUUID(BLEUUID uuid) {
+	return m_serviceMap.getByUUID(uuid);
+}
 
 /**
  * @brief Retrieve the advertising object that can be used to advertise the existence of the server.
@@ -201,6 +220,7 @@ void BLEServer::handleGATTServerEvent(
 			m_connId = param->connect.conn_id; // Save the connection id.
 			if (m_pServerCallbacks != nullptr) {
 				m_pServerCallbacks->onConnect(this);
+				m_pServerCallbacks->onConnect(this, param);			
 			}
 			m_connectedCount++;   // Increment the number of connected devices count.
 			break;
@@ -322,6 +342,14 @@ void BLEServer::setCallbacks(BLEServerCallbacks* pCallbacks) {
 	m_pServerCallbacks = pCallbacks;
 } // setCallbacks
 
+/*
+ * Remove service
+ */
+void BLEServer::removeService(BLEService *service) {
+	service->stop();
+	service->executeDelete();	
+	m_serviceMap.removeService(service);
+}
 
 /**
  * @brief Start advertising.
@@ -337,6 +365,12 @@ void BLEServer::startAdvertising() {
 
 
 void BLEServerCallbacks::onConnect(BLEServer* pServer) {
+	ESP_LOGD("BLEServerCallbacks", ">> onConnect(): Default");
+	ESP_LOGD("BLEServerCallbacks", "Device: %s", BLEDevice::toString().c_str());
+	ESP_LOGD("BLEServerCallbacks", "<< onConnect()");
+} // onConnect
+
+void BLEServerCallbacks::onConnect(BLEServer* pServer, esp_ble_gatts_cb_param_t *param) {
 	ESP_LOGD("BLEServerCallbacks", ">> onConnect(): Default");
 	ESP_LOGD("BLEServerCallbacks", "Device: %s", BLEDevice::toString().c_str());
 	ESP_LOGD("BLEServerCallbacks", "<< onConnect()");

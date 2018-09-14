@@ -1,176 +1,168 @@
-/*
- * Test the REST API client.
- * This application leverages LibCurl.  You must make that package available
- * as well as "enable it" from "make menuconfig" and C++ Settings -> libCurl present.
- *
- * You may also have to include "posix_shims.c" in your compilation to provide resolution
- * for Posix calls expected by libcurl that aren't present in ESP-IDF.
- *
- * See also:
- * * https://github.com/nkolban/esp32-snippets/issues/108
- *
- */
 #include <curl/curl.h>
 #include <esp_log.h>
+#include <RESTClient.h>
 #include <string>
+#include <Task.h>
+#include <WiFi.h>
+#include <WiFiEventHandler.h>
+#include <BLEAdvertisedDevice.h>
+#include <BLEClient.h>
+#include <BLEScan.h>
+#include <BLEUtils.h>
+#include <BLEClient.h>
+#include <BLEDevice.h>
+#include <sdkconfig.h>
 #include <sstream>
-#include "BLEDevice.h"
-
-#include "BLEAdvertisedDevice.h"
-#include "BLEClient.h"
-#include "BLEScan.h"
-#include "BLEUtils.h"
-#include "Task.h"
-
-
-#include "sdkconfig.h"
-
-static char LOG_TAG[] = "main";
-static const int BUILT_IN_LED = 2;
-static const int ON = 1;
-static const int OFF = 1;
-
-#define uS_TO_S_CONVERSION 1000000
-#define TIME_TO_SLEEP 3
+#include <esp_bt.h>
+#include <esp_wifi.h>
 
 extern "C" {
+	#include "http_request_handler.h"
 	void app_main(void);
 }
 
+static char LOG_TAG[] = "BLEClient";
+static WiFi *wifi;
+static const int NUMBER_OF_BEACONS = 3;
+uint32_t connectedCount;
+BLEAddress addresses[NUMBER_OF_BEACONS];
+
 static BLEUUID serviceUUID("91bad492-b950-4226-aa2b-4ede9fa42f59");
-// The characteristic of the remote service we are interested in.
 static BLEUUID    charUUID("0d563a58-196a-48ce-ace2-dfec78acc814");
-//static BLEUUID    charUUID("12345678-9ABC-DEF1-2345-6789ABCDEF12");
 
-//BLEClient*  pClient;
-
-RTC_DATA_ATTR BLEAddress* pAddress;
-
-//static void notifyCallback(
-//	BLERemoteCharacteristic* pBLERemoteCharacteristic,
-//	uint8_t* pData,
-//	size_t length,
-//	bool isNotify) {
-////		std::string value = pBLERemoteCharacteristic->readValue();
-//		ESP_LOGI(LOG_TAG, "Notify callback for characteristic %s of data length %d",
-//				pBLERemoteCharacteristic->getUUID().toString().c_str(), length);
-//
-////		ESP_LOGI(LOG_TAG, "The characteristic value was: %d", value.c_str());
-//
-//		int rssi;
-////		if(value.compare("send") == 0) {
-//			std::ostringstream stringStream;
-//			rssi = pClient->getRssi();
-//			stringStream << rssi;
-//			pBLERemoteCharacteristic->writeValue(stringStream.str());
-////		}
-//}
-
-/**
- * Become a BLE client to a remote BLE server.  We are passed in the address of the BLE server
- * as the input parameter when the task is created.
- */
 class MyClient: public Task {
 	void run(void* data) {
-		pAddress = (BLEAddress*)data;
-		BLEClient *pClient  = BLEDevice::createClient();
+		BLEAddress address;
+		std::stringstream jsonBody;
+		std::stringstream size;
+		std::size_t jsonBodySize;
+		int rssiValue = 0;
+		RESTClient client;
+		bool info;
+		BLEClient* pClient;
 
-		// Connect to the remove BLE Server.
-		pClient->connect(*pAddress);
-
-		// Obtain a reference to the service we are after in the remote BLE server.
-		BLERemoteService* pRemoteService = pClient->getService(serviceUUID);
-		if (pRemoteService == nullptr) {
-			ESP_LOGD(LOG_TAG, "Failed to find our service UUID: %s", serviceUUID.toString().c_str());
-			return;
-		}
-
-
-		// Obtain a reference to the characteristic in the service of the remote BLE server.
-		BLERemoteCharacteristic* pRemoteCharacteristic = pRemoteService->getCharacteristic(charUUID);
-		if (pRemoteCharacteristic == nullptr) {
-			ESP_LOGD(LOG_TAG, "Failed to find our characteristic UUID: %s", charUUID.toString().c_str());
-			return;
-		}
-
-		int rssi = 0;
-		while(1) {
-			// Set a new value of the characteristic
-
-			// Read the value of the characteristic.
-//			std::string value = pRemoteCharacteristic->readValue();
-//			ESP_LOGD(LOG_TAG, "The characteristic value was: %s", value.c_str());
-
-//			if(value.compare("send") == 0) {
-//				std::ostringstream stringStream;
-			rssi = pClient->getRssi();
-			ESP_LOGD(LOG_TAG, "RSSI %d", rssi);
-//				stringStream << rssi;
-//				pRemoteCharacteristic->writeValue(stringStream.str());
-			if(!pClient->isConnected()){
-				ESP_LOGD(LOG_TAG, "LOST CONNECTION!");
-				GPIO_OUTPUT_SET( BUILT_IN_LED, ON );
-				pClient->disconnect();
-				pClient->connect(*pAddress);
-				GPIO_OUTPUT_SET( BUILT_IN_LED, OFF );
-				ESP_LOGD(LOG_TAG, "CONNECTED!");
+		while (true) {
+			info = false;
+			jsonBody.str(std::string());
+			jsonBody.clear();
+			size.str(std::string());
+			size.clear();
+			jsonBody << "{\"measurements\": [";
+			for(int i=0; i<NUMBER_OF_BEACONS; i++) {
+				pClient = BLEDevice::createClient();
+				address = addresses[i];
+				while(!pClient->isConnected()) {
+					ESP_LOGI(LOG_TAG, "CONNECTING TO ADDRESS %d: %s", i, address.toString().c_str());
+					pClient->connect(address);
+					if(!pClient->isConnected()) {
+						pClient->disconnect();
+					}
+				}
+				if(pClient->isConnected()) {
+					info = true;
+					rssiValue = pClient->getRssi();
+					jsonBody << "{\"value\": " << rssiValue << ", \"mac_address\": \"" << address.toString() << "\"}";
+					if (i+1 != NUMBER_OF_BEACONS) {
+						jsonBody << ", ";
+					}
+				}
+				do {
+					pClient->disconnect();
+				} while(pClient->isConnected());
+				delete pClient;
 			}
 
-			FreeRTOS::sleep(5000);
-//			ESP_LOGD(LOG_TAG, "BEFORE SLEEP!");
-//			esp_light_sleep_start();
-//			ESP_LOGD(LOG_TAG, "AFTER SLEEP!");
-//			} else {
-//				FreeRTOS::sleep(1000);
-//			}
+			jsonBodySize = jsonBody.str().size();
+			if (info && jsonBody.str().substr(jsonBodySize-2) == ", ") {
+				ESP_LOGI(LOG_TAG, "REMOVING COMMA");
+				jsonBody.seekp(jsonBodySize-2);
+			}
+
+			jsonBody << "]}";
+			jsonBodySize = jsonBody.str().size();
+			if (info) {
+				ESP_LOGI(LOG_TAG, "STARTING HTTP REQUEST ...");
+				std::string buf("POST ");
+				buf.append(WEB_URL);
+				buf.append(" HTTP/1.1\r\n");
+				buf.append("Host: ");
+				buf.append(WEB_SERVER);
+				buf.append(":");
+				buf.append(WEB_PORT);
+				buf.append("/\r\n");
+				buf.append("Content-Type: application/json");
+				buf.append("\r\n");
+				buf.append("Content-Length:");
+				size << " " << jsonBodySize;
+				buf.append(size.str());
+				buf.append("\r\n\r\n");
+				buf.append(jsonBody.str());
+				const char* req = buf.c_str();
+				ESP_LOGI(LOG_TAG, "REQUEST: \r\n%s", req);
+				http_send_request(req);
+				ESP_LOGI(LOG_TAG, "REQUEST SENT!");
+			} else {
+				ESP_LOGI(LOG_TAG, "COULD NOT CONNECT TO ANY BEACONS");
+			}
+//			FreeRTOS::sleep(100);
 		}
+	}
+};
 
-		pClient->disconnect();
-
-//		// Read the value of the characteristic.
-//		std::string value = pRemoteCharacteristic->readValue();
-//		ESP_LOGD(LOG_TAG, "The characteristic value was: %s", value.c_str());
-
-//		pRemoteCharacteristic->registerForNotify(notifyCallback);
-
-		ESP_LOGD(LOG_TAG, "%s", pClient->toString().c_str());
-		ESP_LOGD(LOG_TAG, "-- End of task");
-	} // run
-}; // MyClient
-
-/**
- * Scan for BLE servers and find the first one that advertises the service we are looking for.
- */
 class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
-	/**
-	 * Called for each advertising BLE server.
-	 */
 	void onResult(BLEAdvertisedDevice advertisedDevice) {
 		ESP_LOGI(LOG_TAG, "Advertised Device: %s", advertisedDevice.toString().c_str());
 
 		if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(serviceUUID)) {
-			GPIO_OUTPUT_SET( BUILT_IN_LED, ON );
-			FreeRTOS::sleep(500);
-			GPIO_OUTPUT_SET( BUILT_IN_LED, OFF );
-			advertisedDevice.getScan()->stop();
-
+			addresses[connectedCount] = advertisedDevice.getAddress();
+			connectedCount++;
 			ESP_LOGI(LOG_TAG, "Found our device!  address: %s", advertisedDevice.getAddress().toString().c_str());
+		}
+
+		if(connectedCount == NUMBER_OF_BEACONS) {
+			advertisedDevice.getScan()->stop();
+			ESP_LOGI(LOG_TAG, "STOPPED SCAN!");
 			MyClient* pMyClient = new MyClient();
 			pMyClient->setStackSize(18000);
-			pMyClient->start(new BLEAddress(*advertisedDevice.getAddress().getNative()));
-		} // Found our server
-	} // onResult
-}; // MyAdvertisedDeviceCallbacks
+			pMyClient->start();
+		}
+	}
+};
 
-void app_main(void) {
+class MyWiFiEventHandler: public WiFiEventHandler {
 
-	GPIO_OUTPUT_SET( BUILT_IN_LED, OFF );
-	ESP_LOGD(LOG_TAG, "Scanning sample starting");
+	esp_err_t staGotIp(system_event_sta_got_ip_t event_sta_got_ip) {
+		ESP_LOGI(LOG_TAG, "MyWiFiEventHandler(Class): staGotIp");
+
+		return ESP_OK;
+	}
+
+	esp_err_t staDisconnected(system_event_sta_disconnected_t info) {
+		ESP_LOGI(LOG_TAG, "DISCONNECTED");
+		wifi->dump();
+		esp_restart();
+
+		return ESP_OK;
+	}
+};
+
+void run() {
+	MyWiFiEventHandler *eventHandler = new MyWiFiEventHandler();
+	wifi = new WiFi();
+	wifi->setWifiEventHandler(eventHandler);
+
 	BLEDevice::init("");
 	BLEDevice::setPower(ESP_PWR_LVL_P7);
+	ESP_LOGI(LOG_TAG, "WIFI_NETWORK: %s", WIFI_SSID);
+	ESP_LOGI(LOG_TAG, "WIFI_PASSWORD: %s", WIFI_PASSWORD);
+	wifi->connectAP(WIFI_SSID, WIFI_PASSWORD);
+
 	BLEScan *pBLEScan = BLEDevice::getScan();
 	pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
 	pBLEScan->setActiveScan(true);
 	pBLEScan->start(15);
-	esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_CONVERSION);
+}
+
+void app_main(void) {
+	run();
 }

@@ -18,6 +18,8 @@
 #endif
 
 
+BLEAddress::BLEAddress() {} // BLEAddress
+
 /**
  * @brief Create an address from the native ESP32 representation.
  * @param [in] address The native representation.
